@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>IP Tracker</title>
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+/>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+  }
+  #map {
+    height: 300px;
+    margin-top: 20px;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-top: 20px;
+  }
+  th, td {
+    border: 1px solid #ccc;
+    padding: 8px;
+    text-align: left;
+  }
+</style>
+</head>
+<body>
+<h1>IP Tracker</h1>
+
+<div id="visitorInfo">
+  <p><strong>Your IP:</strong> <span id="ip">Loading...</span></p>
+  <p><strong>Location:</strong> <span id="location">Loading...</span></p>
+  <p><strong>ISP:</strong> <span id="isp">Loading...</span></p>
+  <p><strong>Visit Count This Session:</strong> <span id="visitCount">0</span></p>
+</div>
+
+<h2>Recent Visitors (this browser only)</h2>
+<table id="recentVisitors">
+  <thead>
+    <tr>
+      <th>IP</th>
+      <th>City</th>
+      <th>Region</th>
+      <th>Country</th>
+      <th>Time</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<div id="map"></div>
+
+<script
+  src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  crossorigin=""
+></script>
+<script>
+async function fetchIPData() {
+  try {
+    const res = await fetch("https://ipapi.co/json/");
+    if (!res.ok) throw new Error("Failed to fetch IP data");
+    return await res.json();
+  } catch (e) {
+    console.error(e);
+    return null;
+  }
+}
+
+function updateVisitCount() {
+  let count = sessionStorage.getItem("visitCount") || 0;
+  count = Number(count) + 1;
+  sessionStorage.setItem("visitCount", count);
+  document.getElementById("visitCount").textContent = count;
+  return count;
+}
+
+function saveVisitor(data) {
+  const visitors =
+    JSON.parse(localStorage.getItem("recentVisitors")) || [];
+  visitors.unshift({
+    ip: data.ip,
+    city: data.city,
+    region: data.region,
+    country: data.country_name,
+    time: new Date().toLocaleString(),
+    latitude: data.latitude,
+    longitude: data.longitude,
+  });
+  // Keep max 10 recent visitors
+  if (visitors.length > 10) visitors.pop();
+  localStorage.setItem("recentVisitors", JSON.stringify(visitors));
+}
+
+function renderVisitorsTable() {
+  const visitors =
+    JSON.parse(localStorage.getItem("recentVisitors")) || [];
+  const tbody = document.querySelector("#recentVisitors tbody");
+  tbody.innerHTML = "";
+  visitors.forEach((v) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${v.ip}</td>
+      <td>${v.city}</td>
+      <td>${v.region}</td>
+      <td>${v.country}</td>
+      <td>${v.time}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function initMap(visitors) {
+  if (!visitors.length) return;
+  const map = L.map("map").setView(
+    [visitors[0].latitude || 0, visitors[0].longitude || 0],
+    2
+  );
+  L.tileLayer(
+    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    {
+      maxZoom: 18,
+      attribution:
+        '© <a href="https://openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }
+  ).addTo(map);
+
+  visitors.forEach((v) => {
+    if (v.latitude && v.longitude) {
+      L.marker([v.latitude, v.longitude])
+        .addTo(map)
+        .bindPopup(
+          `${v.ip} - ${v.city}, ${v.region}, ${v.country}`
+        );
+    }
+  });
+}
+
+async function main() {
+  const data = await fetchIPData();
+  if (!data) {
+    alert("Could not fetch IP info.");
+    return;
+  }
+  document.getElementById("ip").textContent = data.ip;
+  document.getElementById(
+    "location"
+  ).textContent = `${data.city}, ${data.region}, ${data.country_name}`;
+  document.getElementById("isp").textContent = data.org || "N/A";
+
+  updateVisitCount();
+  saveVisitor(data);
+  renderVisitorsTable();
+
+  const visitors = JSON.parse(localStorage.getItem("recentVisitors")) || [];
+  initMap(visitors);
+}
+
+main();
+</script>
+</body>
+</html>
